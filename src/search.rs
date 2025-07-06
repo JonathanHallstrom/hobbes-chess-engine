@@ -238,7 +238,7 @@ fn alpha_beta(
         let new_depth = depth - 1 + extension;
 
         let mut score = Score::MIN;
-        if depth >= 3 && move_count > 3 + root_node as i32 + pv_node as i32 && is_quiet {
+        if depth >= 3 && move_count > 3 + root_node as i32 + pv_node as i32 {
             let mut reduction = td.lmr.reduction(depth, move_count);
 
             if cutnode {
