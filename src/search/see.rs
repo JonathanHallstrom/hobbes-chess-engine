@@ -102,26 +102,61 @@ fn move_value(board: &Board, mv: &Move) -> i32 {
     see_value
 }
 
+// get a mask of the nonzero u64s in v
+#[cfg(target_feature = "avx512f")]
+#[target_feature(enable = "avx512f")]
+pub fn to_bitmasknz_stable(v: [u64; 8]) -> u8 {
+    use std::arch::x86_64::*;
+    unsafe {
+        let x = _mm512_loadu_si512(v.as_ptr() as *const _);
+        let k = _mm512_test_epi64_mask(x, x);
+        k as u8
+    }
+}
+
+// get a mask of the nonzero u64s in v
+#[cfg(all(target_feature = "avx2", not(target_feature = "avx512f")))]
+#[target_feature(enable = "avx2")]
+pub fn to_bitmasknz_stable(v: [u64; 8]) -> u8 {
+    use std::arch::x86_64::*;
+    unsafe {
+        let a = _mm256_loadu_si256(v.as_ptr() as *const _);
+        let b = _mm256_loadu_si256(v.as_ptr().add(4) as *const _);
+        let zero = _mm256_setzero_si256();
+
+        let eq0_a = _mm256_cmpeq_epi64(a, zero);
+        let eq0_b = _mm256_cmpeq_epi64(b, zero);
+        let nz_a = _mm256_andnot_si256(eq0_a, _mm256_set1_epi64x(-1));
+        let nz_b = _mm256_andnot_si256(eq0_b, _mm256_set1_epi64x(-1));
+
+        let packed = _mm256_packs_epi32(nz_a, nz_b);
+        let perm = _mm256_permute4x64_epi64::<0b11011000>(packed);
+        let mask = _mm256_movemask_ps(std::mem::transmute(perm));
+        mask as u8
+    }
+}
+
 fn least_valuable_attacker(board: &Board, our_attackers: Bitboard) -> Piece {
-    if !(our_attackers & board.pcs(Piece::Pawn)).is_empty() {
-        return Piece::Pawn;
+    // SAFETY: theyre wrapped u64s
+    let mut bbs: [u64; 8] = unsafe { std::mem::transmute(board.bb) };
+    bbs[6] = 0;
+    bbs[7] = 0;
+
+    let mut nz = [0; 8];
+    for i in 0..8 {
+        nz[i] = bbs[i] & our_attackers.0;
     }
-    if !(our_attackers & board.pcs(Piece::Knight)).is_empty() {
-        return Piece::Knight;
-    }
-    if !(our_attackers & board.pcs(Piece::Bishop)).is_empty() {
-        return Piece::Bishop;
-    }
-    if !(our_attackers & board.pcs(Piece::Rook)).is_empty() {
-        return Piece::Rook;
-    }
-    if !(our_attackers & board.pcs(Piece::Queen)).is_empty() {
-        return Piece::Queen;
-    }
-    if !(our_attackers & board.pcs(Piece::King)).is_empty() {
-        return Piece::King;
-    }
-    panic!("No attackers found");
+
+    // SAFETY: we only support avx2 and avx512 targets so the function always exists
+    return match unsafe { to_bitmasknz_stable(nz) }.trailing_zeros() {
+        0 => Piece::Pawn,
+        1 => Piece::Knight,
+        2 => Piece::Bishop,
+        3 => Piece::Rook,
+        4 => Piece::Queen,
+        5 => Piece::King,
+        _ => unreachable!("invalid index for Piece"),
+    };
 }
 
 fn attackers_to(board: &Board, square: Square, occupancies: Bitboard) -> Bitboard {
