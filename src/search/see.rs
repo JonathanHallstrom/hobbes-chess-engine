@@ -126,13 +126,11 @@ pub fn to_bitmasknz_stable(v: [u64; 8]) -> u8 {
 
         let eq0_a = _mm256_cmpeq_epi64(a, zero);
         let eq0_b = _mm256_cmpeq_epi64(b, zero);
-        let nz_a = _mm256_andnot_si256(eq0_a, _mm256_set1_epi64x(-1));
-        let nz_b = _mm256_andnot_si256(eq0_b, _mm256_set1_epi64x(-1));
 
-        let packed = _mm256_packs_epi32(nz_a, nz_b);
+        let packed = _mm256_packs_epi32(eq0_a, eq0_b);
         let perm = _mm256_permute4x64_epi64::<0b11011000>(packed);
         let mask = _mm256_movemask_ps(std::mem::transmute(perm));
-        mask as u8
+        !mask as u8
     }
 }
 
