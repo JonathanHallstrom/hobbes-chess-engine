@@ -942,7 +942,7 @@ fn qs(board: &Board, td: &mut ThreadData, mut alpha: i32, beta: i32, ply: usize)
         return -Score::MATE + ply as i32;
     }
 
-    if best_score >= beta && Score::is_defined(best_score) {
+    if best_score >= beta && Score::is_defined(best_score) && Score::is_defined(beta) {
         best_score = (best_score + beta) / 2;
     }
 
