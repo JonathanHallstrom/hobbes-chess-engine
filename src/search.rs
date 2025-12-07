@@ -820,7 +820,16 @@ fn qs(board: &Board, td: &mut ThreadData, mut alpha: i32, beta: i32, ply: usize)
             td.nnue.evaluate(board)
         };
         if !tt_hit {
-            td.tt.insert(board.hash(), Move::NONE, 0, raw_eval, 0, ply, TTFlag::None, tt_pv);
+            td.tt.insert(
+                board.hash(),
+                Move::NONE,
+                0,
+                raw_eval,
+                0,
+                ply,
+                TTFlag::None,
+                tt_pv,
+            );
         }
         let correction = td.correction_history.correction(board, &td.ss, ply);
         static_eval = raw_eval + correction;
@@ -863,7 +872,6 @@ fn qs(board: &Board, td: &mut ThreadData, mut alpha: i32, beta: i32, ply: usize)
 
         let pc = board.piece_at(mv.from()).unwrap();
         let captured = board.captured(&mv);
-        let is_quiet = captured.is_none();
         let is_recapture = board.recapture_sq.is_some_and(|sq| sq == mv.to());
         let is_mate_score = Score::is_mate(best_score);
 
@@ -885,12 +893,6 @@ fn qs(board: &Board, td: &mut ThreadData, mut alpha: i32, beta: i32, ply: usize)
         // Skip moves which lose material once all the pieces are swapped off.
         if !in_check && !see::see(board, &mv, qs_see_threshold()) {
             continue;
-        }
-
-        // Evasion Pruning
-        // In check, stop searching quiet moves after finding at least one non-losing move.
-        if in_check && move_count > 1 && is_quiet && !is_mate_score {
-            break;
         }
 
         let mut board = *board;
@@ -920,6 +922,12 @@ fn qs(board: &Board, td: &mut ThreadData, mut alpha: i32, beta: i32, ply: usize)
 
         if score > best_score {
             best_score = score;
+
+            // Evasion Pruning
+            // In check, stop searching quiet moves after finding at least one non-losing move.
+            if !Score::is_mate(score) {
+                move_picker.skip_quiets = true;
+            }
         }
 
         if score > alpha {
