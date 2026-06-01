@@ -14,8 +14,21 @@ use crate::tools::perft::perft;
 use crate::tools::{fen, pretty};
 use crate::VERSION;
 use std::io;
+use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
+
+fn log(line: &str) {
+    if let Ok(dir) = std::env::var("HOBBES_IO_LOG_DIR") {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(format!("{dir}/io_{}.log", std::process::id()))
+        {
+            let _ = writeln!(f, "{line}");
+        }
+    }
+}
 
 pub struct UCI {
     pub board: Board,
@@ -57,6 +70,7 @@ impl UCI {
             io::stdin()
                 .read_line(&mut line)
                 .expect("info error failed to parse command");
+            log(&format!(">> {}", line.trim_end()));
             let tokens = self.split_args(line.clone());
 
             if let Some(command) = line.split_ascii_whitespace().next() {
@@ -379,7 +393,9 @@ impl UCI {
         search(&self.board, &mut self.td);
 
         // Print the best move
-        println!("bestmove {}", self.td.best_move.to_uci());
+        let bestmove = format!("bestmove {}", self.td.best_move.to_uci());
+        log(&format!("<< {bestmove}"));
+        println!("{bestmove}");
     }
 
     fn handle_eval(&mut self) {
